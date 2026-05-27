@@ -59,7 +59,7 @@
     }
     .counter-sub {
       font-family: 'Caveat', cursive;
-      font-size: 12px; font-weight: 500;
+      font-size: 20px; font-weight: 700;
       color: #333;
     }
     #counter-num {
@@ -102,7 +102,7 @@
     }
     #title-card p {
       font-family: 'Caveat', cursive;
-      font-size: 14px; font-weight: 500;
+      font-size: 22px; font-weight: 700;
       color: #555;
       margin-top: 4px;
     }
@@ -216,7 +216,7 @@
     }
 
     const socket = io();
-    socket.on('existing-pins', (pins) => pins.forEach(({ lat, lng }) => addPin(lat, lng, false)));
+    
     socket.on('new-pin', ({ lat, lng }) => addPin(lat, lng, true));
     socket.on('connect', () => console.log('Projector connected:', socket.id));
   </script>
