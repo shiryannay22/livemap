@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>LiveMap — Drop Your Pin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Caveat:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #fafafa;
+    }
+
+    /* ── Header ── */
+    header {
+      flex-shrink: 0;
+      padding: 12px 20px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      background: #FFE600;
+      position: relative;
+      z-index: 10;
+      /* hand-drawn bottom border illusion */
+      border-bottom: 3px solid #1a1a1a;
+      box-shadow: 0 4px 0 #1a1a1a;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Doodle oval around icon */
+    .icon-oval {
+      width: 44px; height: 44px;
+      border: 3px solid #1a1a1a;
+      border-radius: 50%;
+      background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+      /* slightly rotated for hand-drawn feel */
+      transform: rotate(-3deg);
+      box-shadow: 2px 2px 0 #1a1a1a;
+    }
+
+    .header-text h1 {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 18px;
+      color: #1a1a1a;
+      line-height: 1.1;
+    }
+    .header-text p {
+      font-family: 'Caveat', cursive;
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-top: 2px;
+    }
+
+    /* ── Map ── */
+    #map {
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Doodle-style zoom controls */
+    .leaflet-control-zoom a {
+      font-family: 'Permanent Marker', cursive !important;
+      background: #fff !important;
+      color: #1a1a1a !important;
+      border: 2px solid #1a1a1a !important;
+      box-shadow: 2px 2px 0 #1a1a1a !important;
+    }
+    .leaflet-control-zoom a:hover { background: #FFE600 !important; }
+    .leaflet-control-attribution { font-size: 10px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: calc(28px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%) translateY(60px) rotate(-1deg);
+      z-index: 2000;
+      background: #FFE600;
+      color: #1a1a1a;
+      font-family: 'Permanent Marker', cursive;
+      font-size: 18px;
+      padding: 10px 28px;
+      border: 3px solid #1a1a1a;
+      box-shadow: 4px 4px 0 #1a1a1a;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) rotate(-1deg);
+    }
+
+    /* ── Doodle pin ── */
+    @keyframes pin-drop {
+      0%   { transform: translateY(-24px) scale(0.6) rotate(-10deg); opacity: 0; }
+      65%  { transform: translateY(3px) scale(1.15) rotate(4deg); opacity: 1; }
+      85%  { transform: translateY(-2px) scale(0.95) rotate(-2deg); }
+      100% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    .doodle-pin {
+      animation: pin-drop 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    }
+    .doodle-pin-circle {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: #FFE600;
+      border: 3px solid #1a1a1a;
+      box-shadow: 3px 3px 0 #1a1a1a;
+    }
+    .doodle-pin-stem {
+      width: 3px; height: 10px;
+      background: #1a1a1a;
+      margin: 0 auto;
+    }
+    .doodle-pin-base {
+      width: 8px; height: 3px;
+      background: #1a1a1a;
+      border-radius: 50%;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="icon-oval" id="header-icon">📍</div>
+      <div class="header-text">
+        <h1 id="header-title">Tap the map to drop your pin!</h1>
+        <p id="header-sub">Show the world where you're from 🌍</p>
+      </div>
+    </div>
+  </header>
+
+  <div id="map"></div>
+  <div id="toast">✓ Location sent!</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const map = L.map('map', {
+      center: [20, 10], zoom: 2,
+      zoomControl: true, tap: true, tapTolerance: 15,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 19,
+      attribution: '© OpenStreetMap © CARTO',
+    }).addTo(map);
+
+    let localMarker = null, pinSent = false, toastTimer = null;
+    const socket = io();
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    function makePinIcon() {
+      const wrap = document.createElement('div');
+      wrap.className = 'doodle-pin';
+      wrap.innerHTML = `
+        <div class="doodle-pin-circle"></div>
+        <div class="doodle-pin-stem"></div>
+        <div class="doodle-pin-base"></div>`;
+      return L.divIcon({ className: '', html: wrap, iconSize: [24, 37], iconAnchor: [12, 37] });
+    }
+
+    map.on('click', (e) => {
+      const { lat, lng } = e.latlng;
+      if (localMarker) map.removeLayer(localMarker);
+      localMarker = L.marker([lat, lng], { icon: makePinIcon(), interactive: false }).addTo(map);
+      socket.emit('add-pin', { lat, lng });
+      showToast('✓ Location sent!');
+      if (!pinSent) {
+        pinSent = true;
+        document.getElementById('header-icon').textContent = '✅';
+        document.getElementById('header-title').textContent = "You're on the map!";
+        document.getElementById('header-sub').textContent = "Tap again to move your pin";
+      }
+    });
+
+    socket.on('connect', () => console.log('Connected:', socket.id));
+  </script>
+</body>
+</html>

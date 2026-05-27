@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LiveMap — Projector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Caveat:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #fafafa;
+    }
+
+    /* dot-grid background matching presentation */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: radial-gradient(circle, #ccc 1px, transparent 1px);
+      background-size: 22px 22px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #map {
+      width: 100vw; height: 100vh;
+      position: relative; z-index: 1;
+    }
+
+    .leaflet-control-attribution { display: none; }
+
+    /* ── Counter card – yellow marker style ── */
+    #counter {
+      position: fixed;
+      top: 24px; right: 28px;
+      z-index: 1000;
+      background: #FFE600;
+      border: 3px solid #1a1a1a;
+      box-shadow: 5px 5px 0 #1a1a1a;
+      padding: 14px 20px;
+      transform: rotate(1.5deg);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .counter-left {
+      display: flex; flex-direction: column;
+    }
+    .counter-label {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 13px;
+      color: #1a1a1a;
+      line-height: 1.1;
+    }
+    .counter-sub {
+      font-family: 'Caveat', cursive;
+      font-size: 12px; font-weight: 500;
+      color: #333;
+    }
+    #counter-num {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 52px;
+      color: #1a1a1a;
+      line-height: 1;
+      min-width: 54px;
+      text-align: center;
+    }
+
+    @keyframes card-pop {
+      0%   { transform: rotate(1.5deg) scale(1); }
+      30%  { transform: rotate(-1deg) scale(1.1); }
+      70%  { transform: rotate(2deg) scale(0.97); }
+      100% { transform: rotate(1.5deg) scale(1); }
+    }
+    .pop { animation: card-pop 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+
+    /* ── Title card ── */
+    #title-card {
+      position: fixed;
+      top: 24px; left: 28px;
+      z-index: 1000;
+      background: #fff;
+      border: 3px solid #1a1a1a;
+      box-shadow: 4px 4px 0 #1a1a1a;
+      padding: 12px 18px;
+      transform: rotate(-1.5deg);
+    }
+    #title-card h2 {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 20px;
+      color: #1a1a1a;
+      line-height: 1.1;
+    }
+    /* yellow underline marker effect */
+    #title-card h2 span {
+      background: linear-gradient(transparent 55%, #FFE600 55%);
+    }
+    #title-card p {
+      font-family: 'Caveat', cursive;
+      font-size: 14px; font-weight: 500;
+      color: #555;
+      margin-top: 4px;
+    }
+
+    /* ── Doodle oval SVG decoration ── */
+    #doodle-oval {
+      position: fixed;
+      top: 10px; left: 20px;
+      z-index: 999;
+      pointer-events: none;
+      opacity: 0.12;
+    }
+
+    /* ── Doodle pin markers ── */
+    @keyframes pin-appear {
+      0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+      60%  { transform: scale(1.25) rotate(5deg); opacity: 1; }
+      80%  { transform: scale(0.9) rotate(-3deg); }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes ripple-out {
+      0%   { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(5); opacity: 0; }
+    }
+
+    .doodle-map-pin { animation: pin-appear 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+
+    .pin-circle {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #FFE600;
+      border: 3px solid #1a1a1a;
+      box-shadow: 2px 2px 0 #1a1a1a;
+      position: relative;
+    }
+    .pin-ripple {
+      position: absolute; inset: -2px;
+      border-radius: 50%;
+      border: 2px solid #1a1a1a;
+      animation: ripple-out 1.2s ease-out forwards;
+    }
+    .pin-ripple2 {
+      position: absolute; inset: -2px;
+      border-radius: 50%;
+      border: 2px solid #FFE600;
+      animation: ripple-out 1.2s 0.25s ease-out forwards;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- Doodle background arrow decoration (faint) -->
+  <svg id="doodle-oval" width="200" height="100" viewBox="0 0 200 100">
+    <path d="M 20 50 Q 100 10 180 50 Q 100 90 20 50" fill="none" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+  </svg>
+
+  <div id="title-card">
+    <h2>🌍 <span>Live World Map</span></h2>
+    <p>Drop your pin on mobile!</p>
+  </div>
+
+  <div id="counter">
+    <div class="counter-left">
+      <span class="counter-label">📍 Pins</span>
+      <span class="counter-sub">dropped!</span>
+    </div>
+    <span id="counter-num">0</span>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const map = L.map('map', {
+      center: [25, 10], zoom: 2,
+      zoomControl: false, scrollWheelZoom: false,
+      doubleClickZoom: false, dragging: false,
+      touchZoom: false, keyboard: false,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 19,
+    }).addTo(map);
+
+    const counterEl = document.getElementById('counter-num');
+    const counterCard = document.getElementById('counter');
+    let count = 0;
+
+    function addPin(lat, lng, animate = true) {
+      const wrap = document.createElement('div');
+      wrap.className = animate ? 'doodle-map-pin' : '';
+      wrap.innerHTML = `
+        <div class="pin-circle">
+          ${animate ? '<div class="pin-ripple"></div><div class="pin-ripple2"></div>' : ''}
+        </div>`;
+
+      L.marker([lat, lng], {
+        icon: L.divIcon({ className: '', html: wrap, iconSize: [18, 18], iconAnchor: [9, 9] }),
+        interactive: false,
+      }).addTo(map);
+
+      count++;
+      counterEl.textContent = count;
+
+      if (animate) {
+        counterCard.classList.remove('pop');
+        void counterCard.offsetWidth;
+        counterCard.classList.add('pop');
+      }
+    }
+
+    const socket = io();
+    socket.on('existing-pins', (pins) => pins.forEach(({ lat, lng }) => addPin(lat, lng, false)));
+    socket.on('new-pin', ({ lat, lng }) => addPin(lat, lng, true));
+    socket.on('connect', () => console.log('Projector connected:', socket.id));
+  </script>
+</body>
+</html>
