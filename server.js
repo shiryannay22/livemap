@@ -44,8 +44,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const pin = { lat, lng, ts: Date.now() };
-    pins.push(pin);
+    const pin = { lat, lng, ts: Date.now(), id: socket.id };
+
+    // Replace existing pin from same user, or add new
+    const existing = pins.findIndex(p => p.id === socket.id);
+    if (existing !== -1) pins[existing] = pin;
+    else pins.push(pin);
 
     console.log(`[pin] lat=${lat.toFixed(4)} lng=${lng.toFixed(4)}  total=${pins.length}`);
 
