@@ -191,8 +191,9 @@
     const counterEl = document.getElementById('counter-num');
     const counterCard = document.getElementById('counter');
     let count = 0;
+    const userMarkers = {};
 
-    function addPin(lat, lng, animate = true) {
+    function addPin(lat, lng, userId, animate = true) {
       const wrap = document.createElement('div');
       wrap.className = animate ? 'doodle-map-pin' : '';
       wrap.innerHTML = `
@@ -200,13 +201,23 @@
           ${animate ? '<div class="pin-ripple"></div><div class="pin-ripple2"></div>' : ''}
         </div>`;
 
-      L.marker([lat, lng], {
+      const marker = L.marker([lat, lng], {
         icon: L.divIcon({ className: '', html: wrap, iconSize: [18, 18], iconAnchor: [9, 9] }),
         interactive: false,
       }).addTo(map);
 
-      count++;
-      counterEl.textContent = count;
+      if (userId) {
+        if (userMarkers[userId]) {
+          map.removeLayer(userMarkers[userId]);
+        } else {
+          count++;
+          counterEl.textContent = count;
+        }
+        userMarkers[userId] = marker;
+      } else {
+        count++;
+        counterEl.textContent = count;
+      }
 
       if (animate) {
         counterCard.classList.remove('pop');
@@ -216,8 +227,8 @@
     }
 
     const socket = io();
-    
-    socket.on('new-pin', ({ lat, lng }) => addPin(lat, lng, true));
+
+    socket.on('new-pin', ({ lat, lng, id }) => addPin(lat, lng, id, true));
     socket.on('connect', () => console.log('Projector connected:', socket.id));
   </script>
 </body>
